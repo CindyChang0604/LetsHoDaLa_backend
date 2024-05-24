@@ -1,5 +1,5 @@
 
-const io = require('socket.io')(3000, {
+const io = require('socket.io')(8080, {
   cors: {
     origin: "*",  // 这里可以更精确地指定来源，例如 http://localhost:8080
     methods: ["GET", "POST"],
