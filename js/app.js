@@ -1,4 +1,3 @@
-
 const io = require('socket.io')(8080, {
   cors: {
     origin: "*",  // 这里可以更精确地指定来源，例如 http://localhost:8080
@@ -11,6 +10,7 @@ const io = require('socket.io')(8080, {
 // 用來追蹤每個socket連接的房間
 const socketRoomMap = new Map();
 const roomHostMap = new Map();  // 创建一个新的Map来追踪每个房间的房长
+let rooms = {}; // 房间的集合
 
 // 追踪每个房间内的用户点击数
 const roomClicks = {};
@@ -31,14 +31,57 @@ function sendGameOverData(room) {
   io.to(room).emit('gameOver', { leaderboard: leaderboard, loser: leastClicksUser });
 }
 
+function shuffleArray(array) {
+  for (let i = array.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [array[i], array[j]] = [array[j], array[i]]; // 交换元素
+  }
+  return array;
+}
+
+function checkGuess(room, number) {
+  if (number === rooms[room].secretNumber) {
+      return { isCorrect: true };
+  } else {
+      // 根据实际游戏规则调整返回的提示信息
+      return { isCorrect: false, message: "猜测错误，请继续尝试" };
+  }
+}
+
+function advanceTurn(room) {
+  rooms[room].currentPlayerIndex = (rooms[room].currentPlayerIndex + 1) % rooms[room].players.length;
+}
+
+function promptNextPlayer(room) {
+    const nextPlayerId = rooms[room].players[rooms[room].currentPlayerIndex].socketId;
+    const nextPlayerSocket = io.sockets.connected[nextPlayerId]; // 获取socket实例
+
+    if (nextPlayerSocket) {
+        nextPlayerSocket.emit('yourTurn'); // 直接向该用户发送消息
+    } else {
+        console.log("Socket not found for player with ID:", nextPlayerId);
+    }
+}
+
+
+
 io.on('connection', socket => {
   console.log('New client connected:', socket.id);
 
   // 加入房間
   socket.on('joinRoom', (room, username, isHost) => {
       socket.join(room);
+      if (!rooms[room]) {
+        rooms[room] = {
+          secretNumber: null,
+          players: [],
+          currentPlayerIndex: 0
+        };
+      }
+      rooms[room].players.push({ username: username, socketId: socket.id, isHost: isHost });
       console.log(typeof(isHost), isHost)
       console.log(`Socket ${socket.id} joined room ${room}`);
+      console.log(rooms[room])
       socket.to(room).emit('message', `A new user has joined the room: ${room}`);
       if (isHost) {
         roomHostMap.set(room, username);  // 如果用户是房长，则记录下来
@@ -85,6 +128,42 @@ io.on('connection', socket => {
     sendGameOverData(room);
   });
 
+  socket.on('startGamesecret', (room) => {
+    // 为每个房间随机设置密码
+    rooms[room].secretNumber = Math.floor(Math.random() * 99) + 1;
+    console.log('密碼是', rooms[room].secretNumber);
+    // 为房间内的玩家随机设置猜测顺序
+    rooms[room].players = shuffleArray(rooms[room].players);
+    console.log(rooms[room])
+    // 通知房间内的所有客户端游戏开始和当前顺序
+    io.to(room).emit('gameStartedsecret', { players: rooms[room].players , secret: rooms[room].secretNumber});
+    promptNextPlayer(room);
+  });
+
+  socket.on('guessNumber', (room, guess, min, max) => {
+    if(guess === rooms[room].secretNumber){
+      loser = rooms[room].players[rooms[room].currentPlayerIndex].username
+      io.to(room).emit('endGamesecret', loser)
+      
+    }else if(guess < rooms[room].secretNumber){
+      min = guess
+      io.to(room).emit('updateRange', min, max)
+      advanceTurn(room);
+      promptNextPlayer(room);
+    }else{
+      max = guess
+      io.to(room).emit('updateRange', min, max)
+      advanceTurn(room);
+      promptNextPlayer(room);
+    }
+  });
+
+  socket.on('endGame', (data) => {
+    const { room, username, clicks } = data;
+    updateRoomClicks(room, username, clicks);
+    sendGameOverData(room);
+  });
+
   socket.on('Playagain', (data) => {
     io.to(data.room).emit('playagain', data.time);
   });
@@ -96,7 +175,12 @@ io.on('connection', socket => {
   socket.on('disconnect', () => {
       const room = socketRoomMap.get(socket.id);
       console.log('Client disconnected:', socket.id);
-
+      for (let room in rooms) {
+        rooms[room].players = rooms[room].players.filter(player => player.socketId !== socket.id);
+        if (rooms[room].players.length === 0) {
+            delete rooms[room]; // 如果房间内没有玩家，删除该房间数据
+        }
+      }
       // 移除追蹤
       socketRoomMap.delete(socket.id);
       if (io.sockets.adapter.rooms[room]) {
