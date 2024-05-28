@@ -12,6 +12,7 @@ const socketRoomMap = new Map();
 const roomHostMap = new Map();  // 创建一个新的Map来追踪每个房间的房长
 let rooms = {}; // 房间的集合
 
+
 // 追踪每个房间内的用户点击数
 const roomClicks = {};
 
@@ -37,15 +38,6 @@ function shuffleArray(array) {
       [array[i], array[j]] = [array[j], array[i]]; // 交换元素
   }
   return array;
-}
-
-function checkGuess(room, number) {
-  if (number === rooms[room].secretNumber) {
-      return { isCorrect: true };
-  } else {
-      // 根据实际游戏规则调整返回的提示信息
-      return { isCorrect: false, message: "猜测错误，请继续尝试" };
-  }
 }
 
 function advanceTurn(room) {
@@ -75,7 +67,8 @@ io.on('connection', socket => {
         rooms[room] = {
           secretNumber: null,
           players: [],
-          currentPlayerIndex: 0
+          currentPlayerIndex: 0,
+          height: 0
         };
       }
       rooms[room].players.push({ username: username, socketId: socket.id, isHost: isHost });
@@ -128,6 +121,10 @@ io.on('connection', socket => {
     sendGameOverData(room);
   });
 
+  socket.on('Playagain', (data) => {
+    io.to(data.room).emit('playagain', data.time);
+  });
+
   socket.on('startGamesecret', (room) => {
     // 为每个房间随机设置密码
     rooms[room].secretNumber = Math.floor(Math.random() * 99) + 1;
@@ -158,15 +155,39 @@ io.on('connection', socket => {
     }
   });
 
-  socket.on('endGame', (data) => {
-    const { room, username, clicks } = data;
-    updateRoomClicks(room, username, clicks);
-    sendGameOverData(room);
-  });
+  socket.on('startGamebeer', (room) => {
+    rooms[room].height = 0
+    rooms[room].players = shuffleArray(rooms[room].players);
+    io.to(room).emit('gameStartedbeer', { players: rooms[room].players , secret: rooms[room].secretNumber})
+    promptNextPlayer(room);
+  })
 
-  socket.on('Playagain', (data) => {
-    io.to(data.room).emit('playagain', data.time);
-  });
+  socket.on('pourLiquid', (room) => {
+    io.to(room).emit('updateImg')
+  })
+
+  socket.on('stopPouring', (room) => {
+    io.to(room).emit('stopImg')
+  })
+
+  socket.on('updateH', (room, liquidHeight) => {
+    if (liquidHeight > rooms[room].height){
+      rooms[room].height = liquidHeight
+    }
+  })
+
+  socket.on('updateImg', (room) => {
+    io.to(room).emit('updateHH', rooms[room].height)
+  })
+
+  socket.on('nextTurn', (room) => {
+    advanceTurn(room);
+    promptNextPlayer(room);
+  })
+
+  socket.on('endGamebeer', (room) => {
+    io.to(room).emit('gameEndedbeer', rooms[room].players[rooms[room].currentPlayerIndex].username)
+  })
 
   socket.on('backtomenu', (data) => {
     io.to(data).emit('back')
