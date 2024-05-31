@@ -60,11 +60,19 @@ function promptNextPlayer(room) {
 io.on('connection', socket => {
   console.log('New client connected:', socket.id);
 
-  socket.on('room',(roomname) => {
+  socket.on('Createroom',(roomname) => {
     if(!rooms[roomname]){
-      socket.emit('roomExist', true)
+      socket.emit('CreateroomExist', true)
     }else{
-      socket.emit('roomExist', false)
+      socket.emit('CreateroomExist', false)
+    }
+  })
+
+  socket.on('Joinroom',(roomname) => {
+    if(!rooms[roomname]){
+      socket.emit('JoinroomExist', true)
+    }else{
+      socket.emit('JoinroomExist', false)
     }
   })
 
