@@ -60,6 +60,14 @@ function promptNextPlayer(room) {
 io.on('connection', socket => {
   console.log('New client connected:', socket.id);
 
+  socket.on('room',(roomname) => {
+    if(!rooms[roomname]){
+      socket.emit('roomExist', true)
+    }else{
+      socket.emit('roomExist', false)
+    }
+  })
+
   // 加入房間
   socket.on('joinRoom', (room, username, isHost) => {
       socket.join(room);
