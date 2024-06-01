@@ -216,6 +216,7 @@ io.on('connection', socket => {
         rooms[room].players = rooms[room].players.filter(player => player.socketId !== socket.id);
         if (rooms[room].players.length === 0) {
             delete rooms[room]; // 如果房间内没有玩家，删除该房间数据
+            delete roomClicks[room];
         }
       }
       // 移除追蹤
