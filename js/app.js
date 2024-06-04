@@ -47,7 +47,8 @@ function advanceTurn(room) {
 function promptNextPlayer(room) {
     const nextPlayerId = rooms[room].players[rooms[room].currentPlayerIndex].socketId;
     const nextPlayerSocket = io.sockets.connected[nextPlayerId]; // 获取socket实例
-
+    const player = rooms[room].players[rooms[room].currentPlayerIndex].username
+    io.to(room).emit('playing', player)
     if (nextPlayerSocket) {
         nextPlayerSocket.emit('yourTurn'); // 直接向该用户发送消息
     } else {
@@ -59,7 +60,7 @@ function promptNextPlayer(room) {
 
 io.on('connection', socket => {
   console.log('New client connected:', socket.id);
-
+  
   socket.on('Createroom',(roomname) => {
     if(!rooms[roomname]){
       socket.emit('CreateroomExist', true)
@@ -68,11 +69,19 @@ io.on('connection', socket => {
     }
   })
 
-  socket.on('Joinroom',(roomname) => {
-    if(!rooms[roomname]){
-      socket.emit('JoinroomExist', true)
+  socket.on('Joinroom',(room, username) => {
+    let nameexist = false
+
+    if(!rooms[room]){
+      socket.emit('roomNotexist')
+      return
     }else{
-      socket.emit('JoinroomExist', false)
+      for (let i = 0; i < rooms[room].players.length; i++){
+        if(username === rooms[room].players[i].username){
+          nameexist = true
+        }
+      }
+      socket.emit('JoinroomExist', nameexist)
     }
   })
 
